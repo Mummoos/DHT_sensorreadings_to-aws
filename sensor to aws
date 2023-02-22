@@ -1,0 +1,149 @@
+#include "secrets.h"
+#include <WiFiClientSecure.h>
+#include <MQTTClient.h>
+#include "WiFi.h"
+#include "DHT.h"
+#include <ArduinoJson.h>
+#include <time.h>
+#define DHTPIN 4        // Digital pin connected to the DHT sensor
+#define DHTTYPE DHT11   // DHT 11
+#define MOISTURE_PIN 32  //Analog pin connected to the moisture sensor
+#define AWS_IOT_PUBLISH_TOPIC   "Aquaponics"
+#define AWS_IOT_SUBSCRIBE_TOPIC "ESPaqua"
+const int bufferSize = 1024 * 23; // 23552 bytes
+DHT dht(DHTPIN, DHTTYPE);
+float h ;
+float t;
+float m;
+unsigned long lastMillis = 0;
+unsigned long previousMillis = 0;
+
+
+WiFiClientSecure net = WiFiClientSecure();
+MQTTClient client = MQTTClient(bufferSize);
+
+time_t now;
+time_t nowish = 1510592825;
+void connectAWS()
+{
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+  Serial.println("\n\n=====================");
+  Serial.println("Connecting to Wi-Fi: ");
+   Serial.println(WIFI_SSID);
+  Serial.println("=====================\n");
+
+  while (WiFi.status() != WL_CONNECTED){
+    delay(2000);
+    Serial.print(".");
+  }
+ Serial.println("wifi_connected");
+  // Configure WiFiClientSecure to use the AWS IoT device credentials
+  net.setCACert(AWS_CERT_CA);
+  net.setCertificate(AWS_CERT_CRT);
+  net.setPrivateKey(AWS_CERT_PRIVATE);
+
+  // Connect to the MQTT broker on the AWS endpoint we defined earlier
+  client.begin(AWS_IOT_ENDPOINT, 8883, net);
+  client.setCleanSession(true);
+
+  Serial.println("\n\n=====================");
+  Serial.println("Connecting to AWS IOT");
+  Serial.println("=====================\n");
+
+  while (!client.connect(THINGNAME)) {
+    Serial.print(".");
+    delay(1000);
+  }
+
+  if(!client.connected()){
+    Serial.println("AWS IoT Timeout!");
+    ESP.restart();
+    return;
+  }
+  
+  Serial.println("AWS IoT Connected!");
+  Serial.println("=====================\n");
+  Serial.println("----------------------");
+  Serial.println("Thing name:" THINGNAME);
+ Serial.println("publishing Topic:" AWS_IOT_PUBLISH_TOPIC); 
+  Serial.println("Subscribing Topic:" AWS_IOT_SUBSCRIBE_TOPIC);
+  Serial.println("=====================\n\n");
+}
+
+ 
+void messageHandler(char* topic, byte* payload, unsigned int length)
+{
+  Serial.print("incoming from AWS: ");
+  
+ 
+  StaticJsonDocument<200> doc;
+  deserializeJson(doc, payload);
+  const char* message = doc["message"];
+   Serial.println();
+ 
+  for (int i = 0; i < length; i++) 
+  {
+    Serial.print((char)payload[i]); // bring payload content
+  }
+  
+ 
+}
+void publishMessage()
+{
+  StaticJsonDocument<200> doc;
+  doc["time"] = millis();
+  doc["humidity"] = h;
+  doc["temperature"] = t;
+  doc["moisture"] = m;
+  char jsonBuffer[512];
+  serializeJson(doc, jsonBuffer); // print to client
+ 
+  client.publish(AWS_IOT_PUBLISH_TOPIC, jsonBuffer);
+}
+
+void setup() {
+  Serial.begin(115200);
+  connectAWS();
+  dht.begin();
+  pinMode(MOISTURE_PIN,INPUT);
+}
+
+void loop() {
+ h = dht.readHumidity();
+  t = dht.readTemperature();
+  m = analogRead(32);
+ 
+  if (isnan(h) || isnan(t) )  // Check if any reads failed and exit early (to try again).
+  {
+    Serial.println(F("Failed to read from DHT sensor!"));
+    return;
+  }
+ 
+  Serial.print(F("Humidity: "));
+  Serial.print(h);
+  Serial.print(F("%  Temperature: "));
+  Serial.print(t);
+  Serial.println(F("°C "));
+  delay(2000);
+
+
+  now = time(nullptr);
+ 
+  if (!client.connected())
+  {
+    connectAWS();
+  }
+  else
+  {
+    client.loop();
+    if (millis() - lastMillis > 5000)
+    {
+      lastMillis = millis();
+      publishMessage();
+    
+    }
+  }
+}
+
