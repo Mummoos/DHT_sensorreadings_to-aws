@@ -20,9 +20,6 @@ unsigned long lastMillis = 0;
 
 WiFiClientSecure net = WiFiClientSecure();
 MQTTClient client = MQTTClient();
-
-time_t now;
-time_t nowish = 1510592825;
 void connectAWS()
 {
   WiFi.mode(WIFI_STA);
