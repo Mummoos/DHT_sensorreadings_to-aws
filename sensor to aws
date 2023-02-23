@@ -4,7 +4,6 @@
 #include "WiFi.h"
 #include "DHT.h"
 #include <ArduinoJson.h>
-#include <time.h>
 #define DHTPIN 4        // Digital pin connected to the DHT sensor
 #define DHTTYPE DHT11   // DHT 11
 #define MOISTURE_PIN 32  //Analog pin connected to the moisture sensor
@@ -16,14 +15,12 @@ float h ;
 float t;
 float m;
 unsigned long lastMillis = 0;
-unsigned long previousMillis = 0;
+
 
 
 WiFiClientSecure net = WiFiClientSecure();
 MQTTClient client = MQTTClient(bufferSize);
 
-time_t now;
-time_t nowish = 1510592825;
 void connectAWS()
 {
   WiFi.mode(WIFI_STA);
@@ -72,21 +69,7 @@ void connectAWS()
   Serial.println("=====================\n\n");
 }
 
- 
-void messageHandler(char* topic, byte* payload, unsigned int length)
-{
-  Serial.print("incoming from AWS: ");
-  
- 
-  StaticJsonDocument<200> doc;
-  deserializeJson(doc, payload);
-  const char* message = doc["message"];
-   Serial.println();
- 
-  for (int i = 0; i < length; i++) 
-  {
-    Serial.print((char)payload[i]); // bring payload content
-  }
+
   
  
 }
